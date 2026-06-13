@@ -16,6 +16,9 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    # Permite que el token de Actions cree el Release y suba el APK.
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
 
