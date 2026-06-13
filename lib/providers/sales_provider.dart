@@ -39,6 +39,34 @@ class SalesProvider extends ChangeNotifier {
         productName: product.name,
         quantity: quantity,
         unitPrice: product.price,
+        unitCost: product.cost,
+      ));
+    }
+    notifyListeners();
+  }
+
+  /// Agrega un renglón ya resuelto (usado por la venta por voz).
+  ///
+  /// [productId] = 0 significa "producto suelto" (no está en inventario, no
+  /// descuenta stock). [unitPrice] respeta el precio dictado por el tendero.
+  void addResolvedItem({
+    required int productId,
+    required String name,
+    required double quantity,
+    required double unitPrice,
+    double unitCost = 0,
+  }) {
+    final index =
+        productId > 0 ? _cart.indexWhere((i) => i.productId == productId) : -1;
+    if (index >= 0) {
+      _cart[index] = _cart[index].copyWith(quantity: _cart[index].quantity + quantity);
+    } else {
+      _cart.add(SaleItem(
+        productId: productId,
+        productName: name,
+        quantity: quantity,
+        unitPrice: unitPrice,
+        unitCost: unitCost,
       ));
     }
     notifyListeners();
@@ -66,14 +94,15 @@ class SalesProvider extends ChangeNotifier {
   }
 
   /// Cobra el carrito. Si [creditCustomer] no es nulo, la venta queda fiada
-  /// y se carga a la cuenta del cliente.
-  Future<void> checkout({Customer? creditCustomer}) async {
+  /// y se carga a la cuenta del cliente con el [employeeId] responsable.
+  Future<void> checkout({Customer? creditCustomer, int? employeeId}) async {
     if (_cart.isEmpty) return;
     final total = cartTotal;
     final sale = Sale(
       total: total,
       customerId: creditCustomer?.id,
       isCredit: creditCustomer != null,
+      employeeId: employeeId,
     );
     await _db.insertSale(sale, List.of(_cart));
     if (creditCustomer != null) {
@@ -83,6 +112,7 @@ class SalesProvider extends ChangeNotifier {
         amount: total,
         isPayment: false,
         description: detail,
+        employeeId: employeeId,
       ));
     }
     _cart.clear();

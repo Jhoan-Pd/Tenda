@@ -2,11 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../models/customer.dart';
+import '../../providers/cash_provider.dart';
 import '../../providers/credit_provider.dart';
 import '../../providers/inventory_provider.dart';
 import '../../providers/sales_provider.dart';
 import '../../utils/formatters.dart';
 import '../../widgets/empty_state.dart';
+import '../../widgets/employee_picker.dart';
+import 'voice_sale_screen.dart';
 
 /// Punto de venta: busca productos, arma el carrito y cobra
 /// (de contado o fiado). Al cobrar se descuenta el stock.
@@ -36,18 +39,37 @@ class _SaleScreenState extends State<SaleScreen> {
         children: [
           Padding(
             padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
-            child: TextField(
-              decoration: InputDecoration(
-                hintText: 'Buscar producto para vender...',
-                prefixIcon: const Icon(Icons.search),
-                suffixIcon: _query.isNotEmpty
-                    ? IconButton(
-                        icon: const Icon(Icons.clear),
-                        onPressed: () => setState(() => _query = ''),
-                      )
-                    : null,
-              ),
-              onChanged: (v) => setState(() => _query = v),
+            child: Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    decoration: InputDecoration(
+                      hintText: 'Buscar producto para vender...',
+                      prefixIcon: const Icon(Icons.search),
+                      suffixIcon: _query.isNotEmpty
+                          ? IconButton(
+                              icon: const Icon(Icons.clear),
+                              onPressed: () => setState(() => _query = ''),
+                            )
+                          : null,
+                    ),
+                    onChanged: (v) => setState(() => _query = v),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                SizedBox(
+                  height: 52,
+                  width: 52,
+                  child: IconButton.filled(
+                    tooltip: 'Vender por voz',
+                    icon: const Icon(Icons.mic),
+                    onPressed: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const VoiceSaleScreen()),
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
           Expanded(
@@ -242,6 +264,7 @@ class _CartBar extends StatelessWidget {
 
   Future<void> _checkout(BuildContext context) async {
     final credit = context.read<CreditProvider>();
+    final cash = context.read<CashProvider>();
     final messenger = ScaffoldMessenger.of(context);
     final total = sales.cartTotal;
 
@@ -270,9 +293,16 @@ class _CartBar extends StatelessWidget {
               subtitle: const Text('Se anota a la cuenta de un cliente'),
               onTap: () async {
                 final customer = await _pickCustomer(sheetContext, credit);
-                if (customer != null && sheetContext.mounted) {
-                  Navigator.pop(sheetContext, _CheckoutResult(customer: customer));
-                }
+                if (customer == null || !sheetContext.mounted) return;
+                final employee = await pickEmployee(
+                  sheetContext,
+                  title: '¿Quién fía a ${customer.name}?',
+                );
+                if (employee == null || !sheetContext.mounted) return;
+                Navigator.pop(
+                  sheetContext,
+                  _CheckoutResult(customer: customer, employeeId: employee.id),
+                );
               },
             ),
             const SizedBox(height: 8),
@@ -282,8 +312,9 @@ class _CartBar extends StatelessWidget {
     );
 
     if (result == null) return;
-    await sales.checkout(creditCustomer: result.customer);
+    await sales.checkout(creditCustomer: result.customer, employeeId: result.employeeId);
     await credit.load();
+    await cash.load();
     messenger.showSnackBar(
       SnackBar(
         content: Text(
@@ -391,5 +422,6 @@ class _CartBar extends StatelessWidget {
 
 class _CheckoutResult {
   final Customer? customer;
-  const _CheckoutResult({this.customer});
+  final int? employeeId;
+  const _CheckoutResult({this.customer, this.employeeId});
 }

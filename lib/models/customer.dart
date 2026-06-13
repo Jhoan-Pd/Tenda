@@ -28,6 +28,9 @@ class CreditEntry {
   final double amount;
   final bool isPayment;
   final String description;
+
+  /// Responsable que anotó el fiado o recibió el abono (Ferney, Ana, ...).
+  final int? employeeId;
   final DateTime date;
 
   CreditEntry({
@@ -36,6 +39,7 @@ class CreditEntry {
     required this.amount,
     required this.isPayment,
     this.description = '',
+    this.employeeId,
     DateTime? date,
   }) : date = date ?? DateTime.now();
 
@@ -46,6 +50,7 @@ class CreditEntry {
       'amount': amount,
       'isPayment': isPayment ? 1 : 0,
       'description': description,
+      'employeeId': employeeId,
       'date': date.toIso8601String(),
     };
   }
@@ -57,6 +62,7 @@ class CreditEntry {
       amount: (map['amount'] as num).toDouble(),
       isPayment: (map['isPayment'] as int? ?? 0) == 1,
       description: (map['description'] as String?) ?? '',
+      employeeId: map['employeeId'] as int?,
       date: DateTime.parse(map['date'] as String),
     );
   }

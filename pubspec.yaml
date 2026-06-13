@@ -27,6 +27,8 @@ dependencies:
   http: ^1.2.2
   # Preferencias (margen por defecto, API key, nombre de la tienda)
   shared_preferences: ^2.3.3
+  # Venta por voz: transcripción de voz a texto con el motor del teléfono (gratis)
+  speech_to_text: ^7.0.0
 
 dev_dependencies:
   flutter_test:

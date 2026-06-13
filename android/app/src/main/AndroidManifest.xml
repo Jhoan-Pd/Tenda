@@ -1,6 +1,8 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <!-- Internet: necesario para la lectura de facturas con la IA de Grok -->
     <uses-permission android:name="android.permission.INTERNET"/>
+    <!-- Micrófono: necesario para la venta por voz -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO"/>
     <application
         android:label="Tenda"
         android:name="${applicationName}"
@@ -42,6 +44,10 @@
         <intent>
             <action android:name="android.intent.action.PROCESS_TEXT"/>
             <data android:mimeType="text/plain"/>
+        </intent>
+        <!-- Reconocimiento de voz para la venta por voz (Android 11+) -->
+        <intent>
+            <action android:name="android.speech.RecognitionService"/>
         </intent>
     </queries>
 </manifest>

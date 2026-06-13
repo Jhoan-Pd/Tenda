@@ -44,22 +44,29 @@ class CreditProvider extends ChangeNotifier {
     await load();
   }
 
-  Future<void> addCharge(Customer customer, double amount, String description) async {
+  Future<void> addCharge(
+    Customer customer,
+    double amount,
+    String description, {
+    int? employeeId,
+  }) async {
     await _db.insertCreditEntry(CreditEntry(
       customerId: customer.id!,
       amount: amount,
       isPayment: false,
       description: description,
+      employeeId: employeeId,
     ));
     await load();
   }
 
-  Future<void> addPayment(Customer customer, double amount) async {
+  Future<void> addPayment(Customer customer, double amount, {int? employeeId}) async {
     await _db.insertCreditEntry(CreditEntry(
       customerId: customer.id!,
       amount: amount,
       isPayment: true,
       description: 'Abono',
+      employeeId: employeeId,
     ));
     await load();
   }

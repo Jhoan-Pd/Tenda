@@ -12,6 +12,10 @@ App móvil hecha en **Flutter** para administrar una tienda de barrio en Colombi
 | 📅 **Deudas con proveedores** | Agenda las facturas pendientes con su fecha límite y la app te dice **cuánto ahorrar cada día o cada semana** para pagarlas a tiempo. Registra abonos parciales. |
 | 🔔 **Alertas** | Aviso cuando un producto se está agotando (stock mínimo configurable por producto) y cuando una deuda está por vencer o vencida. |
 | 🛒 **Punto de venta** | Arma el carrito, cobra de contado o fiado, y el stock se descuenta automáticamente. |
+| 🎤 **Venta por voz** | Dicta lo que vendes ("agua de 700, dos panes de 500") y la app lo transcribe, lo interpreta y suma el total. Entiende el vocabulario de tienda ("X de 700" = producto que cuesta $700). El texto y cada renglón se pueden **corregir** antes de cobrar. |
+| 💵 **Cuadre de caja** | Cierre del día: muestra las ventas, recargas, abonos y facturas pagadas; cuentas el efectivo real y la app calcula **el efectivo esperado, el descuadre y la ganancia del día**. |
+| 📱 **Recargas** | Registra las recargas (minutos/datos) vendidas. El efectivo entra a la caja pero **no cuenta como ganancia** (solo su comisión), tal como debe ser. |
+| 👥 **Responsables** | Cada fiado, abono o recarga queda registrado con quién lo hizo (vienen **Ferney** y **Ana**; agregas más en Ajustes). Sin contraseñas. |
 | 🤝 **Fiados** | Cuentas por cliente: anota lo que se llevan fiado, recibe abonos y mira cuánto te deben en total. |
 | 📊 **Dashboard** | Resumen del día: ventas, valor del inventario, deudas pendientes y fiados por cobrar. |
 | 📈 **Historial de ventas** | Consulta las ventas por rango de fechas con el detalle de cada una. |
@@ -74,38 +78,57 @@ Pestaña **Vender**: busca el producto, tócalo para agregarlo al carrito y toca
 - **De contado**: la venta queda registrada y el stock se descuenta.
 - **Fiado**: eliges (o creas) el cliente y queda anotado en su cuenta.
 
-### 5. Fiados
-Pestaña **Fiados**: mira cuánto debe cada cliente, anota fiados manuales y registra abonos.
+### 5. Fiados (con responsable)
+Pestaña **Fiados**: mira cuánto debe cada cliente, anota fiados manuales y registra abonos. Cada vez que fías o recibes un abono, la app pregunta **quién es el responsable** (Ferney, Ana o el que agregues en Ajustes → Responsables).
 
-### 6. Alertas
+### 6. Vender por voz 🎤
+En la pestaña **Vender**, toca el botón del **micrófono** y dicta lo que el cliente lleva, por ejemplo: *"agua de 700, dos panes de 500, una coca cola de 3000"*. La app:
+1. Transcribe tu voz a texto (puedes **corregir el texto** si entendió mal).
+2. Interpreta cada producto: cantidad, nombre y precio. Entiende que **"de 700" significa que cuesta $700**.
+3. Muestra los renglones (los puedes editar) y el total. Toca **Agregar al carrito** y cobra normal.
+
+### 7. Cuadre de caja 💵
+Al final del día, en **Inicio → Cuadre de caja** (o la tarjeta "Ganancia de hoy"):
+1. Registra las **recargas** del día con el botón "Recarga".
+2. La app ya trae los **movimientos automáticos**: ventas de contado, recargas cobradas, abonos recibidos y facturas pagadas.
+3. Ingresa la **base inicial** (con qué abriste) y **cuenta el efectivo** que hay físicamente.
+4. La app calcula el **efectivo esperado**, si **sobra o falta** (descuadre) y la **ganancia del día** (margen de productos + comisión de recargas; el monto de las recargas NO se cuenta como ganancia).
+5. Toca **Cerrar caja** y queda guardado en el historial de cierres.
+
+### 8. Alertas
 La campana 🔔 (arriba a la derecha) muestra los **productos que se están agotando** y las **deudas por vencer**. El número rojo indica cuántas alertas tienes. El stock mínimo de cada producto se configura al crearlo o editarlo.
 
-### 7. Agregar/editar productos a mano
+### 9. Agregar/editar productos a mano
 Pestaña **Inventario → +**. Escribe el costo y el % de ganancia y el **precio de venta se calcula solo** (puedes ajustarlo manualmente; con el botón ↻ vuelves al sugerido). Mantén presionado un producto para agregar stock, editar o eliminar.
 
 ## 🏗️ Arquitectura
 
 ```
 lib/
-├── main.dart                 # Arranque, tema y providers
-├── models/                   # Product, Debt, Sale, Customer, InvoiceItem
+├── main.dart                 # Arranque, tema accesible y providers
+├── models/                   # Product, Debt, Sale, Customer, InvoiceItem,
+│                             #   Employee, Recharge, CashClosing
 ├── data/
-│   └── database_helper.dart  # SQLite local (sqflite)
+│   └── database_helper.dart  # SQLite local (sqflite) con migraciones
 ├── services/
 │   └── grok_service.dart     # Cliente de la API de Grok (visión)
-├── providers/                # Estado con Provider (inventario, ventas, deudas, fiados, ajustes)
+├── providers/                # Estado con Provider (inventario, ventas, deudas,
+│                             #   fiados, caja, empleados, ajustes)
 ├── screens/                  # Pantallas por módulo
-│   ├── dashboard/  products/  invoice/  sales/  debts/  credit/  alerts/  settings/
+│   ├── dashboard/  products/  invoice/  sales/  debts/
+│   ├── credit/  cash/  alerts/  settings/
 ├── utils/
 │   ├── price_calculator.dart # Costo + % ganancia, redondeo a $50
+│   ├── voice_parser.dart     # Interpreta "agua de 700" y números en español
 │   └── formatters.dart       # Formato COP y fechas
-└── widgets/                  # Componentes reutilizables
+└── widgets/                  # Componentes reutilizables (incl. selector de responsable)
 ```
 
 - **Estado**: [provider](https://pub.dev/packages/provider) con `ChangeNotifier`.
 - **Persistencia**: [sqflite](https://pub.dev/packages/sqflite) — base de datos SQLite en el teléfono, sin servidores ni mensualidades.
 - **IA**: API de xAI (`grok-2-vision`) para leer facturas; la respuesta se valida y el usuario siempre revisa antes de guardar.
-- **Tests**: `flutter test` cubre el cálculo de precios y el plan de ahorro de deudas.
+- **Voz**: [speech_to_text](https://pub.dev/packages/speech_to_text) usa el motor de reconocimiento del teléfono (gratis, sin API). La interpretación de "agua de 700" es lógica propia, offline.
+- **Tests**: `flutter test` cubre el cálculo de precios, el plan de ahorro de deudas, el intérprete de voz y el cuadre de caja (26 pruebas).
 - **CI/CD**: GitHub Actions analiza, prueba y compila el APK en cada push (gratis en repos públicos).
 
 ## 🧪 Desarrollo
@@ -119,7 +142,9 @@ flutter run          # correr en modo debug
 
 ## 📌 Notas
 
+- **Datos compartidos entre celulares (próxima fase):** hoy cada celular guarda su propia información localmente (rápido y sin costo). La sincronización en la nube para que todos los que trabajan en la tienda vean lo mismo en tiempo real está planeada como **fase 2** (con Firebase, gratis). Mientras tanto, usa la app en el celular principal de la tienda.
 - Los datos viven **solo en tu teléfono**. Si desinstalas la app se pierden: haz copias de seguridad del teléfono si tu inventario es valioso.
+- **Responsables:** vienen Ferney y Ana. Agrega o quita responsables en Ajustes → Responsables. No hay inicio de sesión: solo se elige quién hizo cada movimiento.
 - El escáner con IA puede equivocarse: **siempre revisa** los productos antes de agregarlos (la app te obliga a pasar por la pantalla de revisión).
 - iOS: el proyecto incluye la carpeta `ios/`, pero compilar para iPhone requiere un Mac y cuenta de desarrollador de Apple (no es gratis). Android es 100% gratis.
 

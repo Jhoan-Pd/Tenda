@@ -4,6 +4,7 @@ import '../data/database_helper.dart';
 import '../models/invoice_item.dart';
 import '../models/product.dart';
 import '../utils/price_calculator.dart';
+import '../utils/voice_parser.dart';
 
 /// Estado del inventario de productos.
 class InventoryProvider extends ChangeNotifier {
@@ -60,6 +61,33 @@ class InventoryProvider extends ChangeNotifier {
   Future<void> addStock(Product product, double quantity) async {
     await _db.updateProduct(product.copyWith(stock: product.stock + quantity));
     await load();
+  }
+
+  /// Busca el producto que mejor coincide con un nombre dictado por voz.
+  /// Ignora tildes y mayúsculas. Devuelve null si no hay coincidencia razonable.
+  Product? matchByName(String query) {
+    final q = VoiceParser.normalize(query);
+    if (q.isEmpty) return null;
+    String norm(String s) => VoiceParser.normalize(s);
+
+    // 1) Coincidencia exacta de nombre.
+    for (final p in _products) {
+      if (norm(p.name) == q) return p;
+    }
+    // 2) El nombre del producto contiene lo dictado (o viceversa).
+    final matches = _products
+        .where((p) => norm(p.name).contains(q) || q.contains(norm(p.name)))
+        .toList()
+      ..sort((a, b) => a.name.length.compareTo(b.name.length));
+    if (matches.isNotEmpty) return matches.first;
+
+    // 3) Alguna palabra dictada coincide con alguna palabra del producto.
+    final words = q.split(' ').where((w) => w.length > 2).toSet();
+    for (final p in _products) {
+      final pWords = norm(p.name).split(' ').toSet();
+      if (words.intersection(pWords).isNotEmpty) return p;
+    }
+    return null;
   }
 
   List<Product> search(String query) {

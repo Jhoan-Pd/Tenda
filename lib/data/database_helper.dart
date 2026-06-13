@@ -1,9 +1,12 @@
 import 'package:path/path.dart';
 import 'package:sqflite/sqflite.dart';
 
+import '../models/cash_closing.dart';
 import '../models/customer.dart';
 import '../models/debt.dart';
+import '../models/employee.dart';
 import '../models/product.dart';
+import '../models/recharge.dart';
 import '../models/sale.dart';
 
 /// Acceso a la base de datos local SQLite.
@@ -11,7 +14,7 @@ import '../models/sale.dart';
 /// Todo se guarda en el teléfono: no requiere internet ni servicios pagos.
 class DatabaseHelper {
   static const _dbName = 'tenda.db';
-  static const _dbVersion = 1;
+  static const _dbVersion = 2;
 
   DatabaseHelper._();
   static final DatabaseHelper instance = DatabaseHelper._();
@@ -30,6 +33,7 @@ class DatabaseHelper {
       version: _dbVersion,
       onConfigure: (db) => db.execute('PRAGMA foreign_keys = ON'),
       onCreate: _createTables,
+      onUpgrade: _upgrade,
     );
   }
 
@@ -74,7 +78,8 @@ class DatabaseHelper {
         date TEXT NOT NULL,
         total REAL NOT NULL,
         customerId INTEGER,
-        isCredit INTEGER NOT NULL DEFAULT 0
+        isCredit INTEGER NOT NULL DEFAULT 0,
+        employeeId INTEGER
       )
     ''');
     await db.execute('''
@@ -84,7 +89,8 @@ class DatabaseHelper {
         productId INTEGER NOT NULL,
         productName TEXT NOT NULL,
         quantity REAL NOT NULL,
-        unitPrice REAL NOT NULL
+        unitPrice REAL NOT NULL,
+        unitCost REAL NOT NULL DEFAULT 0
       )
     ''');
     await db.execute('''
@@ -101,9 +107,96 @@ class DatabaseHelper {
         amount REAL NOT NULL,
         isPayment INTEGER NOT NULL DEFAULT 0,
         description TEXT NOT NULL DEFAULT '',
+        employeeId INTEGER,
         date TEXT NOT NULL
       )
     ''');
+    await db.execute('''
+      CREATE TABLE employees (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL
+      )
+    ''');
+    await db.execute('''
+      CREATE TABLE recharges (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        amount REAL NOT NULL,
+        profit REAL NOT NULL DEFAULT 0,
+        employeeId INTEGER,
+        date TEXT NOT NULL
+      )
+    ''');
+    await db.execute('''
+      CREATE TABLE cash_closings (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        date TEXT NOT NULL,
+        openingBalance REAL NOT NULL,
+        salesCash REAL NOT NULL,
+        salesCredit REAL NOT NULL,
+        creditPayments REAL NOT NULL,
+        rechargesAmount REAL NOT NULL,
+        rechargesProfit REAL NOT NULL,
+        debtsPaid REAL NOT NULL,
+        otherExpenses REAL NOT NULL,
+        productProfit REAL NOT NULL,
+        countedCash REAL NOT NULL,
+        note TEXT NOT NULL DEFAULT ''
+      )
+    ''');
+    await _seedEmployees(db);
+  }
+
+  /// Migra bases de datos creadas con la versión 1 (sin recargas/caja).
+  Future<void> _upgrade(Database db, int oldVersion, int newVersion) async {
+    if (oldVersion < 2) {
+      await db.execute('ALTER TABLE sales ADD COLUMN employeeId INTEGER');
+      await db.execute(
+          'ALTER TABLE sale_items ADD COLUMN unitCost REAL NOT NULL DEFAULT 0');
+      await db.execute('ALTER TABLE credit_entries ADD COLUMN employeeId INTEGER');
+      await db.execute('''
+        CREATE TABLE employees (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          name TEXT NOT NULL
+        )
+      ''');
+      await db.execute('''
+        CREATE TABLE recharges (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          amount REAL NOT NULL,
+          profit REAL NOT NULL DEFAULT 0,
+          employeeId INTEGER,
+          date TEXT NOT NULL
+        )
+      ''');
+      await db.execute('''
+        CREATE TABLE cash_closings (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          date TEXT NOT NULL,
+          openingBalance REAL NOT NULL,
+          salesCash REAL NOT NULL,
+          salesCredit REAL NOT NULL,
+          creditPayments REAL NOT NULL,
+          rechargesAmount REAL NOT NULL,
+          rechargesProfit REAL NOT NULL,
+          debtsPaid REAL NOT NULL,
+          otherExpenses REAL NOT NULL,
+          productProfit REAL NOT NULL,
+          countedCash REAL NOT NULL,
+          note TEXT NOT NULL DEFAULT ''
+        )
+      ''');
+      await _seedEmployees(db);
+    }
+  }
+
+  /// Responsables que vienen por defecto.
+  Future<void> _seedEmployees(Database db) async {
+    final existing = Sqflite.firstIntValue(
+        await db.rawQuery('SELECT COUNT(*) FROM employees'));
+    if ((existing ?? 0) == 0) {
+      await db.insert('employees', {'name': 'Ferney'});
+      await db.insert('employees', {'name': 'Ana'});
+    }
   }
 
   // ---------------- Productos ----------------
@@ -205,10 +298,13 @@ class DatabaseHelper {
           ..remove('id')
           ..['saleId'] = saleId;
         await txn.insert('sale_items', itemMap);
-        await txn.rawUpdate(
-          'UPDATE products SET stock = MAX(0, stock - ?), updatedAt = ? WHERE id = ?',
-          [item.quantity, DateTime.now().toIso8601String(), item.productId],
-        );
+        // Solo descuenta stock de productos reales del inventario (id > 0).
+        if (item.productId > 0) {
+          await txn.rawUpdate(
+            'UPDATE products SET stock = MAX(0, stock - ?), updatedAt = ? WHERE id = ?',
+            [item.quantity, DateTime.now().toIso8601String(), item.productId],
+          );
+        }
       }
       return saleId;
     });
@@ -282,5 +378,119 @@ class DatabaseHelper {
       for (final row in rows)
         row['customerId'] as int: (row['balance'] as num?)?.toDouble() ?? 0,
     };
+  }
+
+  // ---------------- Empleados / responsables ----------------
+
+  Future<List<Employee>> getEmployees() async {
+    final db = await database;
+    final rows = await db.query('employees', orderBy: 'name COLLATE NOCASE');
+    return rows.map(Employee.fromMap).toList();
+  }
+
+  Future<Employee> insertEmployee(Employee employee) async {
+    final db = await database;
+    final id = await db.insert('employees', {'name': employee.name});
+    return Employee(id: id, name: employee.name);
+  }
+
+  Future<void> deleteEmployee(int id) async {
+    final db = await database;
+    await db.delete('employees', where: 'id = ?', whereArgs: [id]);
+  }
+
+  // ---------------- Recargas ----------------
+
+  Future<void> insertRecharge(Recharge recharge) async {
+    final db = await database;
+    final map = recharge.toMap()..remove('id');
+    await db.insert('recharges', map);
+  }
+
+  Future<List<Recharge>> getRecharges({DateTime? from, DateTime? to}) async {
+    final db = await database;
+    String? where;
+    List<Object?>? args;
+    if (from != null && to != null) {
+      where = 'date >= ? AND date < ?';
+      args = [from.toIso8601String(), to.toIso8601String()];
+    }
+    final rows =
+        await db.query('recharges', where: where, whereArgs: args, orderBy: 'date DESC');
+    return rows.map(Recharge.fromMap).toList();
+  }
+
+  Future<void> deleteRecharge(int id) async {
+    final db = await database;
+    await db.delete('recharges', where: 'id = ?', whereArgs: [id]);
+  }
+
+  // ---------------- Cuadre de caja ----------------
+
+  /// Calcula los movimientos del día (rango [from, to)) para el cierre de caja.
+  Future<DayMovements> getDayMovements(DateTime from, DateTime to) async {
+    final db = await database;
+    final range = [from.toIso8601String(), to.toIso8601String()];
+
+    final salesRows = await db.rawQuery('''
+      SELECT
+        COALESCE(SUM(CASE WHEN isCredit = 0 THEN total ELSE 0 END), 0) AS cash,
+        COALESCE(SUM(CASE WHEN isCredit = 1 THEN total ELSE 0 END), 0) AS credit
+      FROM sales WHERE date >= ? AND date < ?
+    ''', range);
+
+    final profitRows = await db.rawQuery('''
+      SELECT COALESCE(SUM((si.unitPrice - si.unitCost) * si.quantity), 0) AS profit
+      FROM sale_items si
+      JOIN sales s ON s.id = si.saleId
+      WHERE s.date >= ? AND s.date < ?
+    ''', range);
+
+    final rechargeRows = await db.rawQuery('''
+      SELECT COALESCE(SUM(amount), 0) AS amount, COALESCE(SUM(profit), 0) AS profit
+      FROM recharges WHERE date >= ? AND date < ?
+    ''', range);
+
+    final creditPayRows = await db.rawQuery('''
+      SELECT COALESCE(SUM(amount), 0) AS total
+      FROM credit_entries WHERE isPayment = 1 AND date >= ? AND date < ?
+    ''', range);
+
+    final debtsPaidRows = await db.rawQuery('''
+      SELECT COALESCE(SUM(amount), 0) AS total
+      FROM debt_payments WHERE date >= ? AND date < ?
+    ''', range);
+
+    double num0(Object? v) => (v as num?)?.toDouble() ?? 0;
+
+    return DayMovements(
+      salesCash: num0(salesRows.first['cash']),
+      salesCredit: num0(salesRows.first['credit']),
+      productProfit: num0(profitRows.first['profit']),
+      rechargesAmount: num0(rechargeRows.first['amount']),
+      rechargesProfit: num0(rechargeRows.first['profit']),
+      creditPayments: num0(creditPayRows.first['total']),
+      debtsPaid: num0(debtsPaidRows.first['total']),
+    );
+  }
+
+  Future<void> insertCashClosing(CashClosing closing) async {
+    final db = await database;
+    final map = closing.toMap()..remove('id');
+    await db.insert('cash_closings', map);
+  }
+
+  Future<List<CashClosing>> getCashClosings() async {
+    final db = await database;
+    final rows = await db.query('cash_closings', orderBy: 'date DESC');
+    return rows.map(CashClosing.fromMap).toList();
+  }
+
+  /// Última base de caja usada (para sugerir la base inicial del próximo cierre).
+  Future<double> getLastCountedCash() async {
+    final db = await database;
+    final rows = await db.query('cash_closings', orderBy: 'date DESC', limit: 1);
+    if (rows.isEmpty) return 0;
+    return (rows.first['countedCash'] as num?)?.toDouble() ?? 0;
   }
 }

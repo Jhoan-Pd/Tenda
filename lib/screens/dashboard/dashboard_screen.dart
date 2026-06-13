@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../providers/cash_provider.dart';
 import '../../providers/credit_provider.dart';
 import '../../providers/debts_provider.dart';
 import '../../providers/inventory_provider.dart';
@@ -8,6 +9,8 @@ import '../../providers/sales_provider.dart';
 import '../../utils/formatters.dart';
 import '../../widgets/summary_card.dart';
 import '../alerts/alerts_screen.dart';
+import '../cash/cash_closing_screen.dart';
+import '../cash/recharge_sheet.dart';
 import '../invoice/invoice_scan_screen.dart';
 import '../products/product_form_screen.dart';
 import '../sales/sales_history_screen.dart';
@@ -23,6 +26,7 @@ class DashboardScreen extends StatelessWidget {
     final debts = context.watch<DebtsProvider>();
     final sales = context.watch<SalesProvider>();
     final credit = context.watch<CreditProvider>();
+    final cash = context.watch<CashProvider>();
     final theme = Theme.of(context);
 
     final alerts =
@@ -35,6 +39,7 @@ class DashboardScreen extends StatelessWidget {
           debts.load(),
           sales.loadToday(),
           credit.load(),
+          cash.load(),
         ]);
       },
       child: ListView(
@@ -104,6 +109,17 @@ class DashboardScreen extends StatelessWidget {
                 icon: Icons.people_outline,
                 color: Colors.purple.shade700,
               ),
+              SummaryCard(
+                title: 'Ganancia de hoy',
+                value: Formatters.cop(cash.todayProfit),
+                subtitle: 'Toca para cuadrar caja',
+                icon: Icons.savings_outlined,
+                color: Colors.teal.shade700,
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const CashClosingScreen()),
+                ),
+              ),
             ],
           ),
           const SizedBox(height: 16),
@@ -136,6 +152,23 @@ class DashboardScreen extends StatelessWidget {
                     context,
                     MaterialPageRoute(builder: (_) => const ProductFormScreen()),
                   ),
+                ),
+                const Divider(height: 1),
+                ListTile(
+                  leading: const CircleAvatar(child: Icon(Icons.point_of_sale_outlined)),
+                  title: const Text('Cuadre de caja'),
+                  subtitle: const Text('Cierra el día: cuenta el efectivo y mira la ganancia'),
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const CashClosingScreen()),
+                  ),
+                ),
+                const Divider(height: 1),
+                ListTile(
+                  leading: const CircleAvatar(child: Icon(Icons.smartphone_outlined)),
+                  title: const Text('Registrar recarga'),
+                  subtitle: const Text('Planes de minutos o datos vendidos'),
+                  onTap: () => showRechargeSheet(context),
                 ),
               ],
             ),

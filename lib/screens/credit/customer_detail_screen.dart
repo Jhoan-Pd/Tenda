@@ -3,7 +3,9 @@ import 'package:provider/provider.dart';
 
 import '../../models/customer.dart';
 import '../../providers/credit_provider.dart';
+import '../../providers/employees_provider.dart';
 import '../../utils/formatters.dart';
+import '../../widgets/employee_picker.dart';
 
 /// Cuenta de un cliente: saldo, historial de fiados y abonos.
 class CustomerDetailScreen extends StatelessWidget {
@@ -105,13 +107,17 @@ class CustomerDetailScreen extends StatelessWidget {
                   itemCount: entries.length,
                   itemBuilder: (context, i) {
                     final e = entries[i];
+                    final responsible = context.read<EmployeesProvider>().nameOf(e.employeeId);
                     return ListTile(
                       dense: true,
                       leading: Icon(
                         e.isPayment ? Icons.south_west : Icons.north_east,
                         color: e.isPayment ? Colors.green : theme.colorScheme.error,
                       ),
-                      title: Text(e.isPayment ? 'Abono' : 'Fiado'),
+                      title: Text(
+                        '${e.isPayment ? 'Abono' : 'Fiado'}'
+                        '${responsible.isNotEmpty ? ' · $responsible' : ''}',
+                      ),
                       subtitle: Text(
                         e.description.isNotEmpty
                             ? '${e.description}\n${Formatters.dateTime(e.date)}'
@@ -139,6 +145,14 @@ class CustomerDetailScreen extends StatelessWidget {
   Future<void> _addEntry(BuildContext context, Customer customer,
       {required bool isPayment}) async {
     final credit = context.read<CreditProvider>();
+
+    // Primero se elige el responsable (Ferney, Ana, ...).
+    final employee = await pickEmployee(
+      context,
+      title: isPayment ? '¿Quién recibe el abono?' : '¿Quién fía a ${customer.name}?',
+    );
+    if (employee == null || !context.mounted) return;
+
     final amount = TextEditingController();
     final description = TextEditingController();
 
@@ -149,6 +163,12 @@ class CustomerDetailScreen extends StatelessWidget {
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Text('Responsable: ${employee.name}',
+                  style: Theme.of(dialogContext).textTheme.bodySmall),
+            ),
+            const SizedBox(height: 8),
             TextField(
               controller: amount,
               autofocus: true,
@@ -179,9 +199,10 @@ class CustomerDetailScreen extends StatelessWidget {
                   amount.text.replaceAll('.', '').replaceAll(',', '.'));
               if (value == null || value <= 0) return;
               if (isPayment) {
-                await credit.addPayment(customer, value);
+                await credit.addPayment(customer, value, employeeId: employee.id);
               } else {
-                await credit.addCharge(customer, value, description.text.trim());
+                await credit.addCharge(customer, value, description.text.trim(),
+                    employeeId: employee.id);
               }
               if (dialogContext.mounted) Navigator.pop(dialogContext);
             },

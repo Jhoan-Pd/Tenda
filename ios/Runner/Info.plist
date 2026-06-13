@@ -4,6 +4,14 @@
 <dict>
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
+	<key>NSCameraUsageDescription</key>
+	<string>Tenda usa la cámara para tomar la foto de las facturas de los proveedores.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Tenda necesita acceso a tus fotos para leer facturas guardadas en la galería.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Tenda usa el micrófono para la venta por voz.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>Tenda convierte tu voz en texto para armar la venta cuando dictas los productos.</string>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
